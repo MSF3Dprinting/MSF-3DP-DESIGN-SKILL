@@ -1,0 +1,5 @@
+# variants.txt — one line per exported variant:   <name> | <-D overrides, space separated, strings in double quotes> | [xN = N identical copies -> N numbered STL files]
+# used by tools/export.sh <item.scad> <version> variants.txt [<item>_context.scad]
+default     | part="holder"
+wide        | part="holder" dev_w=120 screw_spacing=80
+rib         | part="rib" | x10

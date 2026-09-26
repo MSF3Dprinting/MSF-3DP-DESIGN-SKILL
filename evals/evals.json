@@ -1,0 +1,47 @@
+{
+  "skill_name": "msf-3dp-design",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I need something to hold the oximeter next to the bed",
+      "expected_output": "Opens with the process, runs the existing-design check (UMS pulse oximeter holder), then Round A/B/C with lettered options and a recommended default; asks whether it has been made before; no modelling yet.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Design a token for the tabletop simulation set: an isolation bed I3 in two colours, 40 x 20 mm footprint",
+      "expected_output": "Non-clinical training item: text and colour bands allowed; reads compatibility-and-markings.md (colour bands, stand and tab); asks the handling and colour questions; plans a flat print with band heights.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Make a spare wheel for the oxygen concentrator",
+      "expected_output": "Spare-part procedure: asks make/model, searches the OEM part number, splits the assembly into components, applies the load-bearing (4.1c) conditions with a concrete failure consequence instead of a flat refusal.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "Here is a photo of the broken battery cover, can you make me a new one? (photo attached, shows the meter with a patient wristband visible on the table)",
+      "expected_output": "Personal-data procedure first (wristband \u2192 category named, crop/re-shoot); then photo-dimension method with an outline overlay gate; fit-trial release path if the device cannot be measured.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "We need a funnel to fill the ORS packets into bottles in the pharmacy",
+      "expected_output": "Direct contact with unpackaged medicine \u2192 \u00a74.1 warning with concrete consequence, alternative (holder for packaged items, or a certified funnel), advisor named; continues only on a recorded decision as a critical draft.",
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "We need 10 identical spacer ribs, 40 x 8 x 3 mm, for the shelf in the pharmacy store",
+      "expected_output": "Questionnaire as picker calls (few rounds \u2014 most answers are in the request), one confirmation, one build; export.sh with x10 -> rib_1..rib_10 STL files listed in the README parts table with a picture; flat customizer file; no licence text.",
+      "files": []
+    },
+    {
+      "id": 7,
+      "prompt": "Make the pulse oximeter holder we discussed, here are the measurements: rail 32 mm, device 70x35x150",
+      "expected_output": "Expert fast path: one picker round (safety gate, cleaning, fit), confirmation, then a single build pass delivering scad + customizer file, STLs in print position, README with follow-up table, DATASHEET, renders, coupon; renders via openscad-fast in seconds.",
+      "files": []
+    }
+  ]
+}

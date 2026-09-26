@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# openscad-fast — OpenSCAD 2025.07 with the Manifold engine (npm openscad-wasm), same arguments as `openscad`
+# for geometry export (-o out.stl -D ... file.scad). PNG export is not possible here: use `openscad` (native).
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec node "$HERE/openscad_manifold.mjs" "$@"
