@@ -1,6 +1,6 @@
 # IPC and hospital-environment rules
 
-*Reference file of the `msf-3dp-design` skill. Read it for every item used in a hospital or laboratory, or that is ever cleaned.* Section numbers (§) are those of the compiled workflow file (CLAUDE.md v1.2) and are kept so that cross-references stay valid: §0–§3 SKILL.md · §4 scope-gate.md · §5 design-rules.md · §6–§7 openscad-environment.md · §8 ipc-and-hospital.md · §9 compatibility-and-markings.md · §10 verification.md · §11–§12 deliverables.md · §13 lessons.md · Appendix A glossary.md · Appendix C sources.md.
+*Reference file of the `msf-3dp-design` skill. Read it for every item used in a hospital or laboratory, or that is ever cleaned.* Section numbers (§) are shared by every file of the skill: §0–§3 SKILL.md · §4 scope-gate.md · §5 design-rules.md · §6–§7 openscad-environment.md · §8 ipc-and-hospital.md · §9 compatibility-and-markings.md · §10 verification.md · §11–§12 deliverables.md · §13 lessons.md · readiness-levels.md · Appendix A glossary.md · Appendix C sources.md.
 
 ## 8. IPC and hospital‑environment rules
 
@@ -26,9 +26,9 @@
 - The README states the intended use **and** the out‑of‑scope uses. Mounting accessories are not patient‑support devices: never a grab bar, handhold, restraint point or lifting point.
 - Compatibility is explicit: list the exact devices and interfaces with diameters (UMS V1: tubes Ø19 / 25 / 32 mm, poles 20 / 25 mm, humidifier bottles Ø49 / 56 mm); expose them as parameters; never silently round to a size.
 - Falling‑equipment hazard: consider where the device lands if the part fails; prefer retention features (safety locks, latches, lips, kept front edges) that stop accidental disconnection; advise positioning away from patients, cots and walkways.
-- Hardware: commodity parts only (§5.4).
+- Hardware: MSF kit hardware first (stainless M3 / M6); anything else exact, with local alternatives and sources (§5.4).
 - Ageing: PETG latches and hooks become brittle over time. Generous section and radius; support the in‑service check (no cracks, surface clean, latches still flexible); replacement by reprinting is the normal corrective action.
 - Traceability lives in logbooks, not on the part. NFC pockets (§9.2) only on larger non‑mechanical, non‑clinical items, and only when requested.
-- Generated documents (README, DATASHEET, headers, renders) carry no licence statements, certification marks, badges or UIDs — they are internal MSF documents, and such marks would mislead (owner, Sept 2026).
+- Generated documents (README, DATASHEET, headers, renders) carry no licence statements, certification marks, badges or UIDs — they are internal MSF documents, and such marks would mislead (owner, Sept 2026). One exception: the `@license` line of the Customizer file header, which the MSF customizer standard requires (§7.7). The attribution line of the README (made by Claude with the msf-3dp-design skill, with its link) is accountability, not a mark.
 - Storage of spares: sealed zip‑lock bags, room temperature, away from sunlight and humidity.
 

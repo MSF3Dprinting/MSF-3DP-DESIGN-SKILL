@@ -17,18 +17,25 @@ Usage
 
 Mapping: pixel = origin + scale * R(rot) * (u, v), with the image Y axis pointing down. For --z the
 outline coordinates are the part's (x, y); for --view front they are (x, z), for --view side (y, z).
-Strip metadata first (Pillow re-save without exif) — this script re-saves without metadata too.
+The output carries no metadata: the photo is turned upright by its EXIF orientation, then only its pixels are
+kept (no EXIF, GPS, ICC profile or JPEG comment). Still anonymise the input first (SKILL.md §1.5).
 """
 import argparse
 import math
+import os
 import sys
 
 import numpy as np
 
 
 def calibrate(spec):
-    x1, y1, x2, y2, mm = (float(v) for v in spec.split(","))
+    try:
+        x1, y1, x2, y2, mm = (float(v) for v in spec.split(","))
+    except ValueError:
+        sys.exit("--calib needs five numbers: x1,y1,x2,y2,mm  (two pixel points and their real distance in mm)")
     px = math.hypot(x2 - x1, y2 - y1)
+    if px <= 0 or mm <= 0:
+        sys.exit("--calib: the two points must differ and the distance must be positive")
     scale = px / mm
     print(f"{px:.1f} px over {mm:g} mm  ->  scale {scale:.3f} px/mm")
     return scale
@@ -42,7 +49,7 @@ def section_polylines(mesh, z):
     lines = []
     for ent in sec.entities:
         pts = sec.vertices[ent.points][:, :2]
-        lines.append(pts)
+        lines.append((pts, bool(getattr(ent, "closed", False))))   # a plane tangent to a face gives open lines
     return lines
 
 
@@ -57,9 +64,9 @@ def silhouette_polylines(mesh, view):
     geoms = getattr(u, "geoms", [u])
     lines = []
     for g in geoms:
-        lines.append(np.array(g.exterior.coords))
+        lines.append((np.array(g.exterior.coords), True))
         for hole in g.interiors:
-            lines.append(np.array(hole.coords))
+            lines.append((np.array(hole.coords), True))
     return lines
 
 
@@ -85,6 +92,14 @@ def main(argv=None):
         return 0
     if not (a.stl and a.scale and a.origin and (a.z is not None or a.view)):
         ap.error("need --stl, --scale, --origin and either --z or --view (or --calib)")
+    if a.z is not None and a.view:
+        ap.error("give either --z (a section) or --view (a silhouette), not both")
+    if a.scale <= 0:
+        ap.error("--scale must be positive (px per mm; --calib measures it)")
+    try:
+        ox, oy = (float(v) for v in a.origin.split(","))
+    except ValueError:
+        ap.error("--origin needs two numbers: x,y (pixels)")
 
     import trimesh
     from PIL import Image, ImageDraw
@@ -94,7 +109,6 @@ def main(argv=None):
         print("no outline at that height / view")
         return 1
 
-    ox, oy = (float(v) for v in a.origin.split(","))
     c, s = math.cos(math.radians(a.rot)), math.sin(math.radians(a.rot))
     sy = -1.0 if a.flip_y else 1.0
 
@@ -104,20 +118,32 @@ def main(argv=None):
         y = oy - a.scale * (s * u + c * v)  # image Y points down
         return (x, y)
 
-    im = Image.open(a.image).convert("RGB")
+    from PIL import ImageOps
+    src = Image.open(a.image)
+    upright = ImageOps.exif_transpose(src)          # phone photos are often stored sideways with an EXIF tag
+    rgb = upright.convert("RGB")
+    im = Image.new("RGB", rgb.size)                 # pixels only: no EXIF, GPS, ICC profile or comment survives
+    im.paste(rgb)
     d = ImageDraw.Draw(im)
     if a.grid > 0:
         n = int(max(im.width, im.height) / (a.scale * a.grid)) + 1
         for k in range(-n, n + 1):
-            d.line([to_px(k * a.grid, -n * a.grid), to_px(k * a.grid, n * a.grid)], fill="#88888866", width=1)
-            d.line([to_px(-n * a.grid, k * a.grid), to_px(n * a.grid, k * a.grid)], fill="#88888866", width=1)
-    for pts in lines:
+            d.line([to_px(k * a.grid, -n * a.grid), to_px(k * a.grid, n * a.grid)], fill="#bbbbbb", width=1)
+            d.line([to_px(-n * a.grid, k * a.grid), to_px(n * a.grid, k * a.grid)], fill="#bbbbbb", width=1)
+    inside = 0
+    total = 0
+    for pts, closed in lines:
         px = [to_px(float(u), float(v)) for u, v in pts]
+        total += len(px)
+        inside += sum(1 for x, y in px if 0 <= x < im.width and 0 <= y < im.height)
         if len(px) > 1:
-            d.line(px + [px[0]], fill=a.color, width=a.width)
+            d.line(px + ([px[0]] if closed else []), fill=a.color, width=a.width)
+    if total and inside < total:
+        print(f"WARNING: {total - inside} of {total} outline points fall outside the image — check --origin, --scale and --rot")
     r = 5
     d.ellipse([ox - r, oy - r, ox + r, oy + r], outline=a.color, width=2)
-    im.save(a.out)  # no metadata carried over
+    os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
+    im.save(a.out)  # a fresh image: no metadata carried over
     print(f"overlay written to {a.out}: {len(lines)} outline(s), scale {a.scale} px/mm, origin ({ox:g}, {oy:g}), rot {a.rot}°")
     return 0
 

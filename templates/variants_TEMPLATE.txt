@@ -1,5 +1,9 @@
 # variants.txt — one line per exported variant:   <name> | <-D overrides, space separated, strings in double quotes> | [xN = N identical copies -> N numbered STL files]
-# used by tools/export.sh <item.scad> <version> variants.txt [<item>_context.scad]
-default     | part="holder"
-wide        | part="holder" dev_w=120 screw_spacing=80
-rib         | part="rib" | x10
+# used by tools/export.sh <item.scad> <version> variants.txt [<item>_context.scad]. These lines run as they are against scad/example_part.scad.
+# One line per component (print position), one for all parts on a plate, one for the assembled view (goes to stl/view_only/).
+holder    | part="holder"
+insert    | part="insert"
+plate     | part="all"
+assembly  | part="assembly"
+holder_m3 | part="holder" mount="m3"
+# identical copies of one part, e.g. ten ribs of another item:   rib | part="rib" | x10

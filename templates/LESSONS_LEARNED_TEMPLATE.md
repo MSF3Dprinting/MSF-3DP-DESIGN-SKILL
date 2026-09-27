@@ -15,8 +15,10 @@
 | Item | Value |
 |---|---|
 | Question rounds before the Request Summary | |
+| Concepts built / rejected (and why) | |
+| Design review rounds before the files | |
 | Values confirmed by coupon / first article | |
-| Worst overhang · bridges documented · thinnest wall | |
+| Worst overhang · bridges documented · thinnest wall · thinnest loaded section | |
 | Tools used (OpenSCAD version, scripts) | |
 
 ## 3. Lessons

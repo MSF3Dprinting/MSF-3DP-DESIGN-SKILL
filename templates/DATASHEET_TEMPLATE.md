@@ -1,6 +1,6 @@
 # <Item name> — technical specification datasheet
 
-*Full technical record for the 3D printing advisor and the approvers. The short, visual README.md is what users read; this file holds the details. Internal document — no licence statements or certification marks.*
+*Full technical record for the 3D printing advisor and the approvers. The short, visual README.md is what users read; this file holds the details. Designed by Claude using the MSF 3D printing design skill v<version> — https://github.com/MSF3Dprinting/MSF-3DP-DESIGN-SKILL — for verification and accountability.*
 
 ## General Information
 | Field | Value |
@@ -11,12 +11,12 @@
 
 ## FORM
 ### Product picture
-![<item> render or photo](img/<file>.png)
+![<item> render or photo](img/<item>_<variant>_sheet.png)
 ### Version / Category / Subcategory / Critical item / Dangerous goods / Short description
 - Version: x.y
 - Category: Medical / Logistics / Laboratory / Training / Office
 - Subcategory: Biomed / IPC / Pharmacy / WASH / ...
-- Critical item: Yes / No   (section 4.2 of the design rules)
+- Critical item: Yes / No   (scope gate §4.2)
 - Dangerous goods: No
 - Short description: two or three sentences
 ### Dimensions / Use / Solution type
@@ -52,11 +52,16 @@
 | | | | | |
 ### Manufacturing Instructions
 #### 3D printing optimization
-- What is pre-engineered (chamfered bottom edges, compensated horizontal holes, in-built supports, orientation): print as provided, no added supports, do not re-orient
+- What is pre-engineered (chamfered bottom edges, compensated horizontal holes, in-built supports, orientation chosen so every load runs along the layers): print as provided, no added supports, do not re-orient
+- Parts: each component in print position; `<item>_plate` = all components on one plate; `stl/view_only/` = assembled view, not for printing
 #### Material and color
 - Acceptable materials from what is on site, in order of preference, with the difference each makes (e.g. "PETG preferred; PLA acceptable indoors below 40 °C"); clinical items in white, natural or a light colour so soiling and surface imperfections are visible
-#### List of other materials
-- hardware, zip ties, inserts; N/A if none
+#### Hardware and other materials
+| Part | Qty | From (kit / local) | Alternatives if not available | Where it can be taken from |
+|---|---|---|---|---|
+| <e.g. bolt M6 × 40 DIN 912, stainless> | 2 | MSF 3D printing kit | | |
+| <local part: standard, size, length, material> | | local | <at least two> | <medical and non-medical sources — the staff decide> |
+- Tightening: <hand-tight with the hex key, about 1 N·m>; washers under every head and nut on plastic; self-locking nuts on anything that moves or is cleaned often
 #### 3D Printer
 - Any FDM 3D printer; reference: Original Prusa MK4S, 0.4 mm nozzle
 #### Slicer settings
@@ -82,6 +87,14 @@
 
 ## FUNCTION
 ### Detailed description of the component/product/workflow and its use
+### Structural review (T24)
+| Load | Path through the part | Layer direction there | Thinnest loaded section | Hand estimate (inputs → stress) | Margin |
+|---|---|---|---|---|---|
+| <weight of the device> | | along / pressed together | | | |
+| <bolt preload> | | | | | |
+- Fastener pattern: <≥ 2 per side of each clamped member, not collinear>
+- Section of the load-bearing zone: ![section](img/<item>_section_<axis><mm>.png)
+- Hold limit: <in numbers — tested / estimated; working limit ≤ ⅓ of the estimated failure load>
 ### Additional notes
 - Unverified values; tapers and clearance directions; deviations from the MSF design rules and why; hand estimate of stress for load-bearing parts; known limits (e.g. no load rating published)
 ### Cleaning and disinfection / sterilization procedures
@@ -93,7 +106,7 @@
 - No text or embossed symbols on parts that are cleaned
 - Warnings: not a patient-support device / do not autoclave / mount only the listed devices / replace cracked or stiff parts / falling-equipment hazard
 - Repository or Printables links; ISO 10993 note where skin or mucosal contact applies
-- Items placed in the mouth: the guideline entry or written approval relied on, biocompatibility justification, single-use or reprocessing statement (design rules 4.1b)
+- Items placed in the mouth: the guideline entry or written approval relied on, biocompatibility justification, single-use or reprocessing statement (scope gate §4.1b)
 ### Spaulding Classification (IPC)
 - Non-critical / semi-critical / critical, or "no patient contact - to be confirmed by the IPC advisor"
 ### Risk assessment  (UMS - critical items)
@@ -109,20 +122,24 @@
 | Watertight, bodies, size, print position (T4-T6) | | tools/check output |
 | Overhangs / bridges (T7-T8, two passes) | worst <x>°; bridges: none / documented | |
 | Sections and walls (T19) | | |
-| One-file Customizer version identical (T22) | | flatten_scad.py --verify |
+| Customizer file: exact five-line header, identical geometry (T22) | | flatten_scad.py --verify |
+| Customizer widgets: sliders, menus, help text, part menu (T25) | | lint_customizer.py |
+| All-parts plate and assembled view (T26) | | export log |
+| Structural review (T24) | | section above |
 | Not verified | physical print, load test, ... | |
 
 ## ATTACHMENTS
 - Files in the package: <item>.scad, <item>_customizer.scad, STLs (one per identical item, with parameter sets and colour-change heights), coupon, renders, tools, brief - none of them containing personal data
-- Made with the msf-3dp-design skill v<version>; exporter OpenSCAD <version> (Manifold) — recorded in stl/EXPORT_LOG.txt
+- Designed by Claude (Anthropic) using the MSF 3D printing design skill v<version> — https://github.com/MSF3Dprinting/MSF-3DP-DESIGN-SKILL — for verification and accountability; exporter OpenSCAD 2025.07.18 (Manifold) — recorded in stl/EXPORT_LOG.txt
 
 | Role | Name | Date |
 |---|---|---|
-| Designed by | | |
+| Designed by | Claude (Anthropic), msf-3dp-design skill v<version>, for <requesting role / department> | |
 | Product approved by | | |
 | Product tested by | | |
 
 ## VERSION HISTORY
 | Version | Date modified | Modified by | Changes |
 |---|---|---|---|
+| 0.x | | | Rejected concept: <principle> — reason given by the requester: <…> |
 | 1.0 | | | Initial documentation |
