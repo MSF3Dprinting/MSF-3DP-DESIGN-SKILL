@@ -7,7 +7,12 @@ then everything else hidden. This script produces that file from the working fil
 both export the same geometry.
 
 Layout of the output
-  // @name: ...  // @description: ...  // @category: ...  // @credit: ...      (catalogue header)
+  // @name: <title>                                                    the Customizer header: exactly these five
+  // @description: <what the part is for and what equipment it fits>   lines, in this order, first in the file,
+  // @category: <catalogue tab>                                          nothing else on them, no other @ lines
+  // @credit: <who made the model, or where it came from>                anywhere — no variations (MSF customizer
+  // @license: <the real licence: MIT for new MSF designs>               standard; the file is refused without it)
+  (blank line, then a provenance comment)
   the working file's own header comment (design summary)
   the working file's Customizer parameters, groups kept, in their original order
   /* [Hidden] */
@@ -15,14 +20,21 @@ Layout of the output
   the working file's derived values, validation, modules and build
   the modules and functions of every included library
 
+The header lives ONLY in the Customizer file. The first run takes the five values from the command line;
+every later run reuses the header of the existing output file, so `export.sh` can regenerate it. A value
+given on the command line replaces the stored one. @license defaults to MIT (new MSF designs); an adapted
+design keeps its source's licence (--license). Any @ lines in the working file are dropped with a note.
+Without all five values nothing is written and the exit code is 2.
+
 Rules the working file must follow (they are checked): parameters are literal values (no expressions,
 no references to other variables — the Customizer cannot show those); the parameter block ends at the
 line  // ===== Derived values =====  (or at the first module / function); includes are relative.
 
 Usage
   python3 flatten_scad.py part.scad --out part_customizer.scad --name "Wall pocket" \
-      --description "Open box screwed to a wall, holds one handheld device" --category "Hospital" --credit "MSF 3D Printing for All"
-  python3 flatten_scad.py part.scad --out part_customizer.scad --verify        # renders both and compares
+      --description "Open box fixed to a wall that holds one handheld device" --category "Hospital" \
+      --credit "MSF 3D Printing for All" --license MIT
+  python3 flatten_scad.py part.scad --out part_customizer.scad --verify        # reuses the header; renders both and compares
 """
 import argparse
 import os
@@ -38,6 +50,26 @@ ASSIGN_RE = re.compile(r'^\s*(\$?[A-Za-z_]\w*)\s*=\s*(.+?)\s*;\s*(//.*)?$')
 GROUP_RE = re.compile(r'^\s*/\*\s*\[([^\]]*)\]\s*\*/\s*$')
 DEF_RE = re.compile(r'^\s*(module|function)\s+[A-Za-z_]\w*')
 NUM_RE = re.compile(r'^-?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$')
+HEADER_KEYS = ["name", "description", "category", "credit", "license"]
+HEADER_LINE = re.compile(r'^// @(name|description|category|credit|license): (\S.*?)\s*$')
+ANY_AT_RE = re.compile(r'^\s*//\s*@[A-Za-z]+\s*:')
+DEFAULT_LICENSE = "MIT"
+
+
+def read_header(path):
+    """The five header values of an existing Customizer file, or {} when its first five lines are not exact."""
+    if not path or not os.path.exists(path):
+        return {}
+    lines = read(path)[:5]
+    vals = {}
+    for key, ln in zip(HEADER_KEYS, lines):
+        m = HEADER_LINE.match(ln)
+        if not m or m.group(1) != key:
+            return {}
+        vals[key] = m.group(2)
+    return vals if len(vals) == 5 else {}
+
+
 DERIVED_RE = re.compile(r'^\s*//\s*=+\s*derived', re.I)
 FN_EXPORT_RE = re.compile(r'^\s*fn_export\s*=\s*(\d+)\s*;', re.M)
 
@@ -98,13 +130,14 @@ def split_library(lines):
     return values, code
 
 
-def flatten(main_path, name, description, category, credit, facets):
+def flatten(main_path, header, facets):
+    """header: the five values, all present (checked by the caller)."""
     base = os.path.dirname(os.path.abspath(main_path))
     lines = read(main_path)
     # 1. header comment block (before the first include / group / assignment)
-    header, i = [], 0
+    header_lines, i = [], 0
     while i < len(lines) and not INCLUDE_RE.match(lines[i]) and not GROUP_RE.match(lines[i]) and not ASSIGN_RE.match(lines[i]):
-        header.append(lines[i]); i += 1
+        header_lines.append(lines[i]); i += 1
     # 2. includes (in order) and the parameter block up to the derived-values marker
     includes, params, rest = [], [], []
     stage = 'params'
@@ -116,18 +149,8 @@ def flatten(main_path, name, description, category, credit, facets):
             stage = 'rest'
         (params if stage == 'params' else rest).append(ln)
     # strip old catalogue headers from the header block (they are re-emitted from the arguments)
-    old = {}
-    keep = []
-    for ln in header:
-        m = re.match(r'^\s*//\s*@(name|description|category|credit|author|source|hidden):\s*(.*)$', ln)
-        if m:
-            old[m.group(1)] = m.group(2).strip()
-        else:
-            keep.append(ln)
-    name = name or old.get('name') or os.path.splitext(os.path.basename(main_path))[0].replace('_', ' ')
-    description = description or old.get('description') or ''
-    category = category or old.get('category') or 'General'
-    credit = credit or old.get('credit') or old.get('author') or 'MSF 3D Printing for All'
+    keep = [ln for ln in header_lines if not ANY_AT_RE.match(ln)]
+    dropped = len(header_lines) - len(keep)
     # 3. check the parameters are literals
     problems = []
     for ln in params:
@@ -149,13 +172,14 @@ def flatten(main_path, name, description, category, credit, facets):
         if kind == 'include':   # include brings values and modules; use brings modules and functions only
             lib_values += [f"// ---- from {inc} ----"] + v
         lib_code += [f"// ---- modules from {inc} ({kind}) ----"] + c
-    out = [f"// @name: {name}", f"// @description: {description}", f"// @category: {category}", f"// @credit: {credit}",
-           f"// One-file Customizer version generated by flatten_scad.py on {time.strftime('%Y-%m-%d')} from {os.path.basename(main_path)}",
+    notes = [f"NOTE: {dropped} @ line(s) in {os.path.basename(main_path)} dropped — the header belongs only in the Customizer file"] if dropped else []
+    out = [f"// @{k}: {header[k]}" for k in HEADER_KEYS] + ["",
+           f"// One-file Customizer version generated by flatten_scad.py on {time.strftime('%Y-%m-%d')} from {os.path.basename(main_path)} — edit the working file, not this one",
            ""] + keep + params + ["", "/* [Hidden] */", f"facets = {facets};   // smoothness of curves (lower = faster)", "$fn = facets;", ""] \
           + lib_values + ["", "// ===== part (derived values, validation, modules, build) ====="] + rest + [""] + lib_code + [""]
     # the library's own $fn line would override facets: neutralise it
     out = [re.sub(r'^\s*\$fn\s*=\s*\$preview.*$', '// ($fn set by facets above)', l) for l in out]
-    return "\n".join(out), problems
+    return "\n".join(out), problems, notes
 
 
 def export(openscad, scad, stl):
@@ -214,13 +238,27 @@ def main(argv=None):
     ap.add_argument('scad')
     ap.add_argument('--out', help='default: <name>_customizer.scad next to the input')
     ap.add_argument('--name'); ap.add_argument('--description'); ap.add_argument('--category'); ap.add_argument('--credit')
+    ap.add_argument('--license', help=f"the real licence of the design (default {DEFAULT_LICENSE} for new MSF designs)")
     ap.add_argument('--facets', type=int, default=None, help="default: the working file's fn_export (96 in common.scad)")
     ap.add_argument('--verify', action='store_true', help='export both files and compare the geometry')
     ap.add_argument('--openscad', default=None)
     a = ap.parse_args(argv)
     out = a.out or os.path.splitext(a.scad)[0] + '_customizer.scad'
     facets = a.facets or default_facets(a.scad)
-    text, problems = flatten(a.scad, a.name, a.description, a.category, a.credit, facets)
+    header = read_header(out)                                   # the stored header of the existing Customizer file
+    for k in HEADER_KEYS:
+        v = getattr(a, k)
+        if v is not None:
+            header[k] = " ".join(str(v).split())                # one line, no stray spaces
+    header.setdefault("license", DEFAULT_LICENSE)
+    missing = [k for k in HEADER_KEYS if not header.get(k)]
+    if missing:
+        print(f"FAIL header: no value for {', '.join('@' + k for k in missing)} — give "
+              + " ".join(f'--{k} "..."' for k in missing) + f"; later runs reuse the header stored in {out}. Nothing written.")
+        return 2
+    text, problems, notes = flatten(a.scad, header, facets)
+    for n in notes:
+        print(n)
     open(out, 'w', encoding='utf-8').write(text)
     print(f"written {out} ({text.count(chr(10))} lines)")
     for p in problems:

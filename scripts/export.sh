@@ -15,8 +15,13 @@
 #   The tolerance coupon is not a variant: set COUPON=<coupon.scad> (e.g. COUPON=test_coupon.scad).
 # A model announces multi-body STLs with echo("CHECK expect_bodies=N") (print plate) or
 # echo("CHECK view_only expect_bodies=N") (assembled view: checked for watertightness only, not for printing).
+# Every STL is cleaned of zero-area specks (stl_clean.py, logged) before the checks.
+# The one-file Customizer version <item>_customizer.scad is regenerated (flatten_scad.py --verify, which reuses
+# its five-line header) and checked (lint_customizer.py) together with the working file. The first time, give
+# the header values: CZ_NAME="..." CZ_DESCRIPTION="..." CZ_CATEGORY="..." CZ_CREDIT="..." [CZ_LICENSE=MIT].
 # Environment:   OPENSCAD=/path/to/openscad   SECTIONS=auto (default) | 5,20 | "" (none)   ALLOW_BRIDGES=1
-#                NO_RENDERS=1   COUPON=test_coupon.scad   COUPON_D='feature="dshaft" nominal=6'
+#                NO_RENDERS=1   NO_CUSTOMIZER=1 (coupon-only or scratch runs)
+#                COUPON=test_coupon.scad   COUPON_D='preset="rusty" nominal=25'
 #
 # Output (next to the .scad):
 #   stl/<item>_<variant>_v<version>.stl   stl/<item>_<variant>_<k>_v<version>.stl (xN)   stl/<item>_coupon_v<version>.stl
@@ -63,6 +68,7 @@ export_one() {   # name, defines, copies
     echo "FAIL render $name — ${why:-see stl/${name}.log}"; FAIL=1; echo "FAIL render $name  [$defs]  ${why}" >> "$LOG"; return
   fi
   strip < "$log" | grep -E "^(WARNING|ECHO)" | head -20
+  python3 "$HERE/stl_clean.py" "$stl" --quiet | tee -a "$LOG"
   local chk=(python3 "$HERE/check_stl.py" "$stl" --json "$DIR/stl/${name}.check.json") ce view=""
   ce="$(strip < "$log" | grep -oE 'CHECK( +[a-z_]+(=[0-9.]+)?)+' | head -1)"
   if [ -n "$ce" ]; then
@@ -113,6 +119,7 @@ if [ -n "${COUPON:-}" ]; then
     CSTL="$DIR/stl/${ITEM}_coupon_v${VERSION}.stl"
     if "$OPENSCAD" -o "$CSTL" --export-format binstl "${CARGS[@]}" "$CP" > "$DIR/stl/coupon.log" 2>&1; then
       EXPECTED+=("$CSTL")
+      python3 "$HERE/stl_clean.py" "$CSTL" --quiet | tee -a "$LOG"
       echo "coupon  $(basename "$CSTL")  [${COUPON_D:-defaults}]" >> "$LOG"
       strip < "$DIR/stl/coupon.log" | grep "^ECHO" | sed 's/^ECHO: //' | tee -a "$LOG"
       python3 "$HERE/check_stl.py" "$CSTL" --quiet || { FAIL=1; echo "FAIL check coupon" >> "$LOG"; }
@@ -125,6 +132,19 @@ if [ -n "${COUPON:-}" ]; then
     else
       echo "FAIL coupon — $(strip < "$DIR/stl/coupon.log" | grep -E "^ERROR|Assertion" | head -1)"; FAIL=1; echo "FAIL coupon render" >> "$LOG"
     fi
+  fi
+fi
+
+if [ -z "${NO_CUSTOMIZER:-}" ]; then
+  echo "--- customizer"
+  CZ="$DIR/${ITEM}_customizer.scad"; FL=(python3 "$HERE/flatten_scad.py" "$SCAD" --out "$CZ" --verify)
+  [ -n "${CZ_NAME:-}" ] && FL+=(--name "$CZ_NAME"); [ -n "${CZ_DESCRIPTION:-}" ] && FL+=(--description "$CZ_DESCRIPTION")
+  [ -n "${CZ_CATEGORY:-}" ] && FL+=(--category "$CZ_CATEGORY"); [ -n "${CZ_CREDIT:-}" ] && FL+=(--credit "$CZ_CREDIT")
+  [ -n "${CZ_LICENSE:-}" ] && FL+=(--license "$CZ_LICENSE")
+  if "${FL[@]}" && python3 "$HERE/lint_customizer.py" "$SCAD" && python3 "$HERE/lint_customizer.py" "$CZ"; then
+    echo "customizer  $(basename "$CZ")  header, widgets and geometry checked" >> "$LOG"
+  else
+    FAIL=1; echo "FAIL customizer $(basename "$CZ") — see the messages above (no Customizer file ships without its header)" | tee -a "$LOG"
   fi
 fi
 

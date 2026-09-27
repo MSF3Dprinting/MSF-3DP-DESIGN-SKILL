@@ -6,7 +6,9 @@
 // Contents
 //   2D:  rounded_rect, rounded_poly, teardrop2d, hex_grid
 //   3D:  chamfered_prism, rounded_box, section_cut
-//   Holes (cutters): vertical_hole, teardrop_hole, flat_top_hole, cone_roof_bore, nut_trap, drain_hole
+//   Holes (cutters): vertical_hole, teardrop_hole, flat_top_hole, cone_roof_bore, nut_trap, drain_hole, flared_cutter
+//   Kit hardware (cutters, M3 / M6 from common.scad): kit_hole, kit_hole_h, kit_counterbore, kit_nut_well
+//   Several parts: print_plate (all parts on one plate, print position)
 //   Adhesion / standing parts: brim_ear, brim_ears, corner_ears, breakaway_support, tab, slot
 //   Previews: ghost_tube, ghost_pole, ghost_device, ghost_wall
 //
@@ -15,9 +17,10 @@
 
 // ---------------------------------------------------------------- 2D --------------------------------
 
-// Rectangle centred at the origin with rounded corners. size = [x, y].
+// Rectangle centred at the origin with rounded corners. size = [x, y]. The radius is clamped just below half
+// the shorter side, so a large r never collapses the shape to nothing.
 module rounded_rect(size, r = 2) {
-    rr = min(r, size[0] / 2, size[1] / 2);
+    rr = min(r, size[0] / 2 - 0.01, size[1] / 2 - 0.01);
     if (rr <= 0) square(size, center = true);
     else offset(r = rr) square([size[0] - 2 * rr, size[1] - 2 * rr], center = true);
 }
@@ -133,6 +136,75 @@ module drain_hole(d = drain_d, t = 2, clr = hole_clr, c = 0.6) {
         translate([0, 0, -EPS]) cylinder(d1 = dd + 2 * c, d2 = dd, h = c + EPS);
         translate([0, 0, t - c]) cylinder(d1 = dd, d2 = dd + 2 * c, h = c + EPS);
     }
+}
+
+// Straight cutter through a plate of thickness h (from z = 0) with a 45° flare at the bottom (c_bot: no
+// elephant's foot closing the opening) and a lead-in at the top (c_top). The 2D child must be CONVEX.
+// Each flare is a hull of two ADJACENT slabs only — one hull over both flares would widen the whole opening.
+// c_bot = 0 or c_top = 0 simply leaves that flare out.
+module flared_cutter(h, c_bot = 0.4, c_top = 0.6) {
+    translate([0, 0, -EPS]) linear_extrude(h + 2 * EPS) children();
+    if (c_bot > 0) hull() {
+        translate([0, 0, -EPS]) linear_extrude(EPS) offset(delta = c_bot) children();
+        translate([0, 0, c_bot]) linear_extrude(EPS) children();
+    }
+    if (c_top > 0) hull() {
+        translate([0, 0, h - c_top]) linear_extrude(EPS) children();
+        translate([0, 0, h]) linear_extrude(EPS) offset(delta = c_top) children();
+    }
+}
+
+// ---------------------------------------------------------------- Kit hardware (M3 / M6) ------------
+// Sizes come from common.scad (kit_* functions). Position the cutters with translate / rotate.
+
+// Vertical clearance hole for a kit bolt through `h` mm from z = 0 (ISO 273 medium + hole_clr).
+module kit_hole(m, h) {
+    assert(kit_has(m), str("kit bolts are M3 or M6, not M", m));
+    vertical_hole(kit_clear_d(m), h);
+}
+
+// Horizontal clearance hole for a kit bolt along Y through a wall of thickness l, teardrop-compensated.
+module kit_hole_h(m, l) {
+    assert(kit_has(m), str("kit bolts are M3 or M6, not M", m));
+    teardrop_hole(kit_clear_d(m) + hole_clr, l);
+}
+
+// Counterbore for a DIN 912 head, `depth` mm deep, opening upward from z = 0 (the head sits below the
+// surface; the part is printed with the counterbore opening up, so it needs no support).
+module kit_counterbore(m, depth) {
+    assert(kit_has(m), str("kit bolts are M3 or M6, not M", m));
+    translate([0, 0, -EPS]) cylinder(d = kit_cbore_d(m), h = depth + EPS);
+}
+
+// Captive nut well for a DIN 934 (nyloc = false) or DIN 985 (nyloc = true) nut, opening upward from z = 0:
+// across flats + 0.3 mm, depth = nut height + 0.5 mm unless given.
+module kit_nut_well(m, nyloc = false, depth = undef) {
+    assert(kit_has(m), str("kit nuts are M3 or M6, not M", m));
+    nut_trap(kit_nut_af(m), is_undef(depth) ? (nyloc ? kit_nyloc_h(m) : kit_nut_h(m)) + 0.5 : depth);
+}
+
+// ---------------------------------------------------------------- Several parts on one plate --------
+function _sum(v, i = 0) = i >= len(v) ? 0 : v[i] + _sum(v, i + 1);
+function _before(v, i) = i <= 0 ? 0 : _sum([for (k = [0 : i - 1]) v[k]]);
+
+// All parts of an item on one print plate, each child in its own print position and centred on the origin
+// in XY; sizes = [[x, y], ...] = the footprint of each child. The children are laid out in a row along X,
+// or along Y when the row is wider than the bed; a guard stops when neither fits. It announces the number
+// of bodies for the checks (CHECK line read by export.sh and sweep.py).
+module print_plate(sizes, gap = 5, bed = bed_size, bodies = undef) {
+    n = len(sizes);
+    assert($children == n, str("print_plate: ", $children, " children but ", n, " sizes"));
+    xs = [for (s = sizes) s[0]]; ys = [for (s = sizes) s[1]];
+    sx = _sum(xs) + gap * (n - 1); sy = _sum(ys) + gap * (n - 1);
+    row = sx <= bed[0] && max(ys) <= bed[1];
+    col = !row && sy <= bed[1] && max(xs) <= bed[0];
+    assert(row || col, str("the parts do not fit on one ", bed[0], " x ", bed[1], " mm plate (", round(sx), " x ",
+                           round(max(ys)), " or ", round(max(xs)), " x ", round(sy), " mm) - print them one by one"));
+    echo(str("CHECK expect_bodies=", is_undef(bodies) ? n : bodies));
+    for (i = [0 : n - 1])
+        translate(row ? [-sx / 2 + _before(xs, i) + i * gap + xs[i] / 2, 0, 0]
+                      : [0, -sy / 2 + _before(ys, i) + i * gap + ys[i] / 2, 0])
+            children(i);
 }
 
 // ---------------------------------------------------------------- Adhesion / standing parts ---------

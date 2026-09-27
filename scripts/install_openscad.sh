@@ -3,7 +3,8 @@
 # Tested on Ubuntu 24.04 in the claude.ai sandbox and in a Claude Code cloud container. Installs:
 #   native OpenSCAD 2021.01 (apt) + xvfb + fonts-liberation — PNG views only (render_views.py)
 #   openscad-fast = OpenSCAD 2025.07.18 with the Manifold engine (npm openscad-wasm) — every geometry export
-#   Python: trimesh numpy scipy shapely rtree networkx pillow — the checks (networkx: section walls, T19)
+#   Python: trimesh numpy scipy shapely rtree networkx pillow matplotlib — the checks (networkx: section walls,
+#           T19; matplotlib: section drawings)
 # The snapshot host files.openscad.org is usually unreachable (403); pass --snapshot URL to try one.
 # Safe to run again: installed parts are skipped, the readiness test always runs.
 # Usage:  bash scripts/install_openscad.sh [--snapshot https://files.openscad.org/snapshots/OpenSCAD-<date>-x86_64.AppImage]
@@ -34,7 +35,7 @@ if [ -n "$SNAP" ]; then
 fi
 
 # 4. python tooling for the checks (shapely + rtree + networkx for sections, scipy for the footprint)
-PY_PKGS="trimesh numpy scipy shapely rtree networkx pillow"
+PY_PKGS="trimesh numpy scipy shapely rtree networkx pillow matplotlib"
 timeout 300 pip install -q $PY_PKGS --break-system-packages 2>/dev/null \
   || timeout 300 pip install -q $PY_PKGS 2>&1 | tail -1      # older pip has no --break-system-packages
 
@@ -64,5 +65,5 @@ else
 fi
 
 echo "openscad: $(openscad --version 2>&1 | head -1)"
-python3 -c "import trimesh, shapely, scipy, rtree, networkx, PIL; print('python tooling ok')" 2>&1 | tail -1
+python3 -c "import trimesh, shapely, scipy, rtree, networkx, PIL, matplotlib; print('python tooling ok')" 2>&1 | tail -1
 echo "STL export: openscad-fast (Manifold, seconds)  ·  PNG views: native openscad via render_views.py (xvfb-run)"

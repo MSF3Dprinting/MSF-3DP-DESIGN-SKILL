@@ -21,8 +21,10 @@ Usage
   python3 sweep.py part.scad --spec cases.json     # explicit cases (see below)
   python3 sweep.py part.scad --check --sections auto --report tools/sweep_report_$(date +%F).txt
   python3 sweep.py part.scad --check --report r.txt --resume      # skip the cases already in r.txt
+  python3 sweep.py --merge r1.txt r2.txt --report all.txt       # one report and SUMMARY over chunked runs
 The report is written line by line, so a run that is stopped keeps what it did; --resume continues it.
-Long sweeps: run in the foreground in chunks (--params a,b,c) with one --report and --resume.
+Long sweeps: run in the foreground in chunks (--params a,b,c), one report per chunk, then --merge.
+Every PASS STL is cleaned of zero-area specks (stl_clean.py) before check_stl.py runs; the reason column says so.
 
 cases.json: {"cases": [{"name": "wide", "D": {"dev_w": 150, "part": "holder"}}, ...]}
 Fixed overrides for every case: --fixed 'part="holder"' --fixed 'fn_export=48'
@@ -158,15 +160,44 @@ def done_cases(report):
     names = {}
     if report and os.path.exists(report):
         for line in open(report, encoding="utf-8"):
-            m = re.match(r"^(PASS|GUARD|FAIL)\s+(\S+)\s+[\d.]+s(?:\s|$)", line)
+            m = RESULT_LINE.match(line)
             if m:
                 names[m.group(2).strip()] = line.rstrip("\n")
     return names
 
 
+RESULT_LINE = re.compile(r"^(PASS|GUARD|FAIL)\s+(\S+)\s+[\d.]+s(?:\s|$)")
+
+
+def merge(reports, out):
+    """Combine chunk reports: the last line per case wins; one SUMMARY for all."""
+    cases, heads = {}, []
+    for r in reports:
+        for line in open(r, encoding="utf-8"):
+            line = line.rstrip("\n")
+            m = RESULT_LINE.match(line)
+            if m:
+                cases[m.group(2)] = line
+            elif line.startswith("sweep of"):
+                heads.append(line)
+    n = {s: sum(1 for l in cases.values() if l.startswith(s)) for s in ("PASS", "GUARD", "FAIL")}
+    ends = [c for c, l in cases.items() if l.startswith("GUARD") and ("=min(" in c or "=max(" in c)]
+    lines = [f"merged report of {len(reports)} chunk(s):"] + ["  " + h for h in heads] + list(cases.values())
+    lines.append(f"SUMMARY: {n['PASS']} PASS, {n['GUARD']} GUARD, {n['FAIL']} FAIL of {len(cases)}")
+    if ends:
+        lines.append(f"SLIDER ENDS STOPPED BY A GUARD ({len(ends)}): {', '.join(ends)} — narrow these ranges unless another "
+                     "parameter makes the end valid (T3)")
+    text = "\n".join(lines) + "\n"
+    if out:
+        open(out, "w", encoding="utf-8").write(text)
+    print(text, end="")
+    return 1 if n["FAIL"] else 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("scad")
+    ap.add_argument("scad", nargs="?")
+    ap.add_argument("--merge", nargs="+", metavar="REPORT", help="combine chunk reports into --report")
     ap.add_argument("--spec", help="JSON file with explicit cases")
     ap.add_argument("--params", help="comma list: only sweep these parameters")
     ap.add_argument("--fixed", action="append", default=[], help="-D override applied to every case, e.g. 'part=\"holder\"'")
@@ -179,6 +210,10 @@ def main(argv=None):
     ap.add_argument("--report", default="", help="write the text report here, line by line")
     ap.add_argument("--resume", action="store_true", help="skip the cases already recorded in --report and append")
     a = ap.parse_args(argv)
+    if a.merge:
+        return merge(a.merge, a.report)
+    if not a.scad:
+        ap.error("give the .scad file (or --merge REPORT ...)")
 
     if a.openscad is None:
         here = os.path.dirname(os.path.abspath(__file__))
@@ -234,6 +269,10 @@ def main(argv=None):
             try:
                 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
                 from check_stl import check_file
+                from stl_clean import clean
+                nspeck, _ = clean(r["stl"])
+                if nspeck:
+                    r["reason"] = (r["reason"] + "; " if r["reason"] else "") + f"{nspeck} speck(s) removed by stl_clean"
                 chk = check_file(r["stl"], sections=a.sections, allow_bridges=a.allow_bridges, **r.get("check_args", {}))
                 if not chk["ok"]:
                     r["status"] = "FAIL"
