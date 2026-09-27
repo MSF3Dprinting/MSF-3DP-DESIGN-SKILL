@@ -26,6 +26,8 @@
 # Output (next to the .scad):
 #   stl/<item>_<variant>_v<version>.stl   stl/<item>_<variant>_<k>_v<version>.stl (xN)   stl/<item>_coupon_v<version>.stl
 #   stl/view_only/<item>_<variant>_v<version>.stl   img/<item>_<variant>_<view>.png + _sheet.png   img/<item>_coupon.png
+#   (context, exploded and section views once per set of overrides other than part=, e.g. only for the first
+#   of holder / insert / plate)
 #   stl/EXPORT_LOG.txt (exporter version, date, parameter set and check result per STL, coupon step table)
 # Exit code 1 if any render or check fails or an expected file is missing — fix the model, do not ship.
 [ -z "${BASH_VERSION:-}" ] && exec bash "$0" "$@"
@@ -48,6 +50,7 @@ mkdir -p "$DIR/stl" "$DIR/img"
 LOG="$DIR/stl/EXPORT_LOG.txt"
 FAIL=0
 EXPECTED=()      # every STL this run must leave behind
+declare -A CTX_DONE   # context scenes already rendered, keyed by the -D overrides other than part=
 strip() { sed -E 's/^\[OpenSCAD[^]]*\]: //'; }   # tolerate an older wrapper that prefixed every line
 {
   echo "=== export $(date -u +%FT%TZ)  $ITEM v$VERSION"
@@ -92,8 +95,15 @@ export_one() {   # name, defines, copies
   if [ -z "${NO_RENDERS:-}" ]; then
     local rv=(python3 "$HERE/render_views.py" "$SCAD" --out "$DIR/img" --name "${ITEM}_${name}" --openscad "$NATIVE_OPENSCAD")
     for d in "${args[@]}"; do [ "$d" != "-D" ] && rv+=(-D "$d"); done
-    [ -n "$CONTEXT" ] && [ -z "$view" ] && rv+=(--context "$CONTEXT")
+    # The context scene shows the installed item whatever `part` a variant exports: render it once per set of
+    # other overrides (holder, insert and plate share it; a variant with other sizes or hardware gets its own).
+    local ckey; ckey="k:$(split_defs "$defs" | grep -v '^part=' | sort | tr '\n' ' ')"   # never empty (bash refuses an empty key)
+    if [ -n "$CONTEXT" ] && [ -z "$view" ]; then
+      if [ -z "${CTX_DONE[$ckey]+x}" ]; then CTX_DONE[$ckey]="$name"; rv+=(--context "$CONTEXT")
+      else echo "      context views: as for ${CTX_DONE[$ckey]} (img/${ITEM}_${CTX_DONE[$ckey]}_context.png)" | tee -a "$LOG"; fi
+    fi
     "${rv[@]}" || { echo "FAIL renders for $name"; FAIL=1; echo "FAIL renders $name" >> "$LOG"; }
+    EXPECTED+=("$DIR/img/${ITEM}_${name}_sheet.png")   # a render step that never ran shows up as MISSING
   fi
 }
 
@@ -128,6 +138,7 @@ if [ -n "${COUPON:-}" ]; then
         for d in "${CARGS[@]}"; do [ "$d" != "-D" ] && RV+=(-D "$d"); done
         "${RV[@]}" >/dev/null && mv -f "$DIR/img/${ITEM}_coupon_top.png" "$DIR/img/${ITEM}_coupon.png" \
           || { echo "FAIL coupon render"; FAIL=1; }
+        EXPECTED+=("$DIR/img/${ITEM}_coupon.png")
       fi
     else
       echo "FAIL coupon — $(strip < "$DIR/stl/coupon.log" | grep -E "^ERROR|Assertion" | head -1)"; FAIL=1; echo "FAIL coupon render" >> "$LOG"
@@ -148,7 +159,7 @@ if [ -z "${NO_CUSTOMIZER:-}" ]; then
   fi
 fi
 
-echo "=== files"
+echo "=== files (STLs and the pictures each variant needs)"
 for f in "${EXPECTED[@]}"; do
   if [ -s "$f" ]; then printf '  %8d bytes  %s\n' "$(stat -c %s "$f")" "${f#$DIR/}"
   else echo "  MISSING  ${f#$DIR/}"; FAIL=1; echo "MISSING ${f#$DIR/}" >> "$LOG"; fi

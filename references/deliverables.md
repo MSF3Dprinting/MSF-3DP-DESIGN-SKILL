@@ -27,6 +27,7 @@ Model → automated checks and structural review → **design review**: the user
   stl/EXPORT_LOG.txt                     exporter version, date, parameter set, check result and HARDWARE per STL, coupon steps
   img/<item>_<variant>_sheet.png         captioned overview = README picture                                  required
   img/<item>_<variant>_front/_top/_side/_iso.png   _context.png (installed)   _exploded.png   _section.png
+                                         (context, exploded, section: once per set of overrides other than part=)
   img/<item>_assembly_iso.png            assembled view                                                       several components
   img/<item>_coupon.png                  coupon, top view
   img/<item>_section_<axis><mm>.png      section drawings of the load-bearing zone (section_from_stl.py)
