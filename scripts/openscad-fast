@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # openscad-fast — OpenSCAD 2025.07 with the Manifold engine (npm openscad-wasm), same arguments as `openscad`
-# for geometry export (-o out.stl -D ... file.scad). PNG export is not possible here: use `openscad` (native).
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# for geometry export (-o out.stl -D ... file.scad) and --version. No PNG and no 3MF here: use `openscad` (native)
+# for images. Messages are printed without prefix, exactly like the native binary.
+HERE="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"   # resolve the symlink (/usr/local/bin/openscad-fast) to the real folder
 exec node "$HERE/openscad_manifold.mjs" "$@"

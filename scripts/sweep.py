@@ -1,22 +1,28 @@
 #!/usr/bin/env python3
 """sweep.py — parameter sweep for any Customizer-ready OpenSCAD file (MSF "3D Printing for All").
 
-Reads the Customizer parameters of a .scad file (ranges `// [min:step:max]`, dropdowns
-`// [a, b, c]`, booleans), renders the default set first (T1) and then every extreme with the
-other parameters at their defaults (T2 / T3), and classifies each case:
+Reads the Customizer parameters of a .scad file — the block before `// ===== Derived values =====` (or the
+first module / function), [Hidden] excluded — with their widgets: slider `// [min:max]` or
+`// [min:step:max]`, menu `// [a, b]` / `// [a:Label, b:Label]` / `// [3:M3, 6:M6]`, checkbox (true/false).
+Renders the default set first (T1), then every slider end and every other menu value and checkbox state
+with the other parameters at their defaults (T2 / T3), and classifies each case:
   PASS   rendered, STL written
-  GUARD  an assert() stopped it — the message is recorded (a working guard is a pass)
+  GUARD  an assert() stopped it — the message is recorded (a working guard is a pass; a GUARD at a slider
+         end is also counted separately: narrow the range unless another parameter makes that end valid)
   FAIL   any other error, a timeout, or an empty STL
-It refuses to run a case whose parameter does not exist in the file (OpenSCAD would silently
-ignore the -D and the case would test nothing).
+It refuses to run a case whose parameter is not a Customizer parameter of the file (OpenSCAD would
+silently ignore the -D and the case would test nothing) — for --spec, --params and --fixed alike.
+A model may announce what its STL is:  echo("CHECK expect_bodies=2")  for an all-parts print plate, or
+echo("CHECK view_only expect_bodies=2")  for an assembled view; --check passes that to check_stl.py.
 
 Usage
-  python3 sweep.py part.scad                       # auto cases from the Customizer ranges
+  python3 sweep.py part.scad                       # auto cases from the Customizer
   python3 sweep.py part.scad --params wall_t,drain # only these parameters
   python3 sweep.py part.scad --spec cases.json     # explicit cases (see below)
-  python3 sweep.py part.scad --check --sections 5,20   # run check_stl.py on every PASS case
-Long sweeps: run detached and poll —
-  setsid nohup python3 sweep.py part.scad --check > tools/sweep_report_$(date +%F).txt 2>&1 < /dev/null &
+  python3 sweep.py part.scad --check --sections auto --report tools/sweep_report_$(date +%F).txt
+  python3 sweep.py part.scad --check --report r.txt --resume      # skip the cases already in r.txt
+The report is written line by line, so a run that is stopped keeps what it did; --resume continues it.
+Long sweeps: run in the foreground in chunks (--params a,b,c) with one --report and --resume.
 
 cases.json: {"cases": [{"name": "wide", "D": {"dev_w": 150, "part": "holder"}}, ...]}
 Fixed overrides for every case: --fixed 'part="holder"' --fixed 'fn_export=48'
@@ -29,43 +35,56 @@ import subprocess
 import sys
 import time
 
-PARAM_RE = re.compile(r'^\s*([A-Za-z_]\w*)\s*=\s*([^;/]+?)\s*;\s*(?://\s*(\[[^\]]*\])?)?', re.M)
+sys.dont_write_bytecode = True   # no __pycache__ next to the scripts (it breaks `cp scripts/* tools/`)
+
+ASSIGN = re.compile(r'^\s*([A-Za-z_]\w*)\s*=\s*([^;]+?)\s*;\s*(?://\s*(.*))?$')
+GROUP = re.compile(r'^\s*/\*\s*\[([^\]]*)\]\s*\*/\s*$')
+END = re.compile(r'^\s*(//\s*=+\s*derived|module\s|function\s)', re.I)
+NUM = r'-?(?:\d+\.?\d*|\.\d+)(?:[eE]-?\d+)?'
+RANGE = re.compile(rf'^\[\s*{NUM}\s*(?::\s*{NUM}\s*){{1,2}}\]$')
+CHECK_RE = re.compile(r'CHECK((?:\s+\w+(?:=[\d.]+)?)+)')
 
 
 def parse_params(path):
-    """Return {name: {"default": str, "kind": range|dropdown|bool|number|string|other, ...}}."""
-    text = open(path, encoding="utf-8").read()
-    params = {}
-    for m in PARAM_RE.finditer(text):
-        name, default, ann = m.group(1), m.group(2).strip(), m.group(3)
-        if name.startswith("$") or name in params:
+    """Customizer parameters: {name: {"default", "kind": range|dropdown|bool|number|string|other, ...}}."""
+    params, group = {}, ""
+    for line in open(path, encoding="utf-8"):
+        if END.match(line):
+            break
+        g = GROUP.match(line)
+        if g:
+            group = g.group(1).strip()
             continue
-        info = {"default": default, "kind": "other"}
+        if group.lower() == "hidden":
+            continue
+        m = ASSIGN.match(line)
+        if not m or m.group(1) in params:
+            continue
+        name, default, ann = m.group(1), m.group(2).strip(), (m.group(3) or "").strip()
+        spec = ann.split("]")[0] + "]" if ann.startswith("[") else ""
+        info = {"default": default, "kind": "other", "string": default.startswith('"')}
         if default in ("true", "false"):
             info["kind"] = "bool"
-        elif ann and ":" in ann:
-            nums = [float(x) for x in re.findall(r"-?\d+(?:\.\d+)?", ann)]
-            if len(nums) >= 2:
-                info["kind"] = "range"
-                info["min"], info["max"] = nums[0], nums[-1]
-        elif ann:
-            opts = [o.strip() for o in ann.strip("[]").split(",") if o.strip()]
-            if opts:
-                info["kind"] = "dropdown"
-                info["options"] = [o.split(":")[0].strip() for o in opts]
-        elif re.fullmatch(r"-?\d+(?:\.\d+)?", default):
+        elif spec and RANGE.match(spec):
+            nums = [float(x) for x in re.findall(NUM, spec)]
+            info.update(kind="range", min=nums[0], max=nums[-1])
+        elif spec:
+            opts = [o.strip() for o in spec[1:-1].split(",") if o.strip()]
+            info.update(kind="dropdown", options=[o.split(":")[0].strip().strip('"') for o in opts])
+        elif re.fullmatch(NUM, default):
             info["kind"] = "number"
-        elif default.startswith('"'):
+        elif info["string"]:
             info["kind"] = "string"
         params[name] = info
     return params
 
 
 def fmt(name, value, params):
-    """Format a -D value: strings quoted, others as given."""
+    """Format a -D value: quoted only when the parameter is a string."""
     v = str(value)
-    kind = params.get(name, {}).get("kind")
-    if kind in ("dropdown", "string") and not v.startswith('"') and v not in ("true", "false"):
+    if isinstance(value, float) and value.is_integer():
+        v = str(int(value))
+    if params.get(name, {}).get("string") and not v.startswith('"'):
         v = f'"{v}"'
     return f"{name}={v}"
 
@@ -76,11 +95,11 @@ def auto_cases(params, only=None):
         if only and name not in only:
             continue
         if info["kind"] == "range":
-            cases.append({"name": f"{name}=min({info['min']:g})", "D": {name: info["min"]}})
-            cases.append({"name": f"{name}=max({info['max']:g})", "D": {name: info["max"]}})
+            cases.append({"name": f"{name}=min({info['min']:g})", "D": {name: info["min"]}, "end": True})
+            cases.append({"name": f"{name}=max({info['max']:g})", "D": {name: info["max"]}, "end": True})
         elif info["kind"] == "dropdown":
             for o in info["options"]:
-                if o.strip('"') != info["default"].strip('"'):
+                if o != info["default"].strip('"'):
                     cases.append({"name": f"{name}={o}", "D": {name: o}})
         elif info["kind"] == "bool":
             other = "false" if info["default"] == "true" else "true"
@@ -88,8 +107,26 @@ def auto_cases(params, only=None):
     return cases
 
 
+def check_args_from(out):
+    """Parse `ECHO: "CHECK expect_bodies=2 view_only"` into check_stl keyword arguments."""
+    m = CHECK_RE.search(out)
+    if not m:
+        return {}
+    ca = {}
+    for tok in m.group(1).split():
+        if tok.startswith("expect_bodies="):
+            ca["expect_bodies"] = int(float(tok.split("=")[1]))
+        elif tok.startswith("max_size="):
+            ca["max_size"] = float(tok.split("=")[1])
+        elif tok == "view_only":
+            ca["view_only"] = True
+    return ca
+
+
 def run_case(openscad, scad, case, params, fixed, outdir, timeout):
     stl = os.path.join(outdir, re.sub(r"[^\w.=-]+", "_", case["name"]) + ".stl")
+    if os.path.exists(stl):
+        os.remove(stl)
     cmd = [openscad, "-o", stl, "--export-format", "binstl"]
     for k, v in case["D"].items():
         cmd += ["-D", fmt(k, v, params)]
@@ -99,19 +136,32 @@ def run_case(openscad, scad, case, params, fixed, outdir, timeout):
     t0 = time.time()
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-        out = p.stdout + p.stderr
-        rc = p.returncode
+        out, rc = p.stdout + p.stderr, p.returncode
     except subprocess.TimeoutExpired:
         return {"name": case["name"], "status": "FAIL", "reason": f"timeout after {timeout} s", "stl": None, "seconds": timeout}
     secs = round(time.time() - t0, 1)
+    lines = [re.sub(r"^\[OpenSCAD[^\]]*\]:\s*", "", l) for l in out.splitlines()]   # tolerate an older wrapper's prefix
     if rc == 0 and os.path.exists(stl) and os.path.getsize(stl) > 84:
-        warn = [l for l in out.splitlines() if l.startswith("WARNING")]
-        return {"name": case["name"], "status": "PASS", "reason": "; ".join(warn[:3]), "stl": stl, "seconds": secs}
-    m = re.search(r"ERROR: Assertion.*?(?:\n|$)", out)
+        warn = [l for l in lines if l.startswith("WARNING")]
+        return {"name": case["name"], "status": "PASS", "reason": "; ".join(warn[:3]), "stl": stl, "seconds": secs,
+                "check_args": check_args_from(out)}
+    m = next((l for l in lines if "Assertion" in l and "ERROR" in l), None)
     if m:
-        return {"name": case["name"], "status": "GUARD", "reason": m.group(0).strip(), "stl": None, "seconds": secs}
-    err = [l for l in out.splitlines() if "ERROR" in l or "error" in l.lower()]
-    return {"name": case["name"], "status": "FAIL", "reason": (err[-1] if err else out.strip()[-300:]) or "no STL written", "stl": None, "seconds": secs}
+        return {"name": case["name"], "status": "GUARD", "reason": m.strip()[:300], "stl": None, "seconds": secs}
+    err = [l for l in lines if l.startswith(("ERROR", "WARNING")) or "FAILED" in l]
+    reason = err[0] if err else ("no geometry: " + next((l for l in lines if "empty" in l.lower()), "no STL written"))
+    return {"name": case["name"], "status": "FAIL", "reason": reason.strip()[:300], "stl": None, "seconds": secs}
+
+
+def done_cases(report):
+    """Case names already recorded in an earlier (possibly interrupted) report."""
+    names = {}
+    if report and os.path.exists(report):
+        for line in open(report, encoding="utf-8"):
+            m = re.match(r"^(PASS|GUARD|FAIL)\s+(\S+)\s+[\d.]+s(?:\s|$)", line)
+            if m:
+                names[m.group(2).strip()] = line.rstrip("\n")
+    return names
 
 
 def main(argv=None):
@@ -120,58 +170,89 @@ def main(argv=None):
     ap.add_argument("--spec", help="JSON file with explicit cases")
     ap.add_argument("--params", help="comma list: only sweep these parameters")
     ap.add_argument("--fixed", action="append", default=[], help="-D override applied to every case, e.g. 'part=\"holder\"'")
-    ap.add_argument("--openscad", default=None, help="default: tools/openscad-fast (Manifold) if installed, else openscad")
+    ap.add_argument("--openscad", default=None, help="default: openscad-fast (Manifold) if it works, else openscad")
     ap.add_argument("--out", default="sweep_out")
     ap.add_argument("--timeout", type=int, default=180)
     ap.add_argument("--check", action="store_true", help="run check_stl.py on every PASS case")
-    ap.add_argument("--sections", default="", help="passed to check_stl.py")
+    ap.add_argument("--sections", default="", help="passed to check_stl.py (numbers, NN%%, top-D or auto)")
     ap.add_argument("--allow-bridges", action="store_true")
-    ap.add_argument("--report", default="", help="write the text report here as well")
+    ap.add_argument("--report", default="", help="write the text report here, line by line")
+    ap.add_argument("--resume", action="store_true", help="skip the cases already recorded in --report and append")
     a = ap.parse_args(argv)
 
     if a.openscad is None:
-        fast = os.path.join(os.path.dirname(os.path.abspath(__file__)), "openscad-fast")
-        wasm = os.path.join(os.path.expanduser("~"), ".openscad-wasm", "node_modules", "openscad-wasm", "openscad.js")
-        a.openscad = fast if (os.path.exists(fast) and os.path.exists(wasm)) else "openscad"
+        here = os.path.dirname(os.path.abspath(__file__))
+        fast = os.path.join(here, "openscad-fast")
+        a.openscad = "openscad"
+        if os.path.exists(fast):
+            try:
+                if subprocess.run(["bash", fast, "--version"], capture_output=True, timeout=60).returncode == 0:
+                    a.openscad = fast
+            except Exception:
+                pass
+    if a.openscad.endswith("openscad-fast") and not os.access(a.openscad, os.X_OK):
+        os.chmod(a.openscad, 0o755)   # git does not always keep the executable bit
     params = parse_params(a.scad)
     if a.spec:
-        cases = json.load(open(a.spec))["cases"]
+        spec = json.load(open(a.spec))
+        if not isinstance(spec, dict) or not isinstance(spec.get("cases"), list):
+            print('REFUSED: --spec must be a JSON object {"cases": [{"name": ..., "D": {...}}, ...]}')
+            return 2
+        cases = spec["cases"]
     else:
-        only = set(a.params.split(",")) if a.params else None
+        only = set(p.strip() for p in a.params.split(",") if p.strip()) if a.params else None
+        if only and only - set(params):
+            print("REFUSED: --params names that are not Customizer parameters of the file:", ", ".join(sorted(only - set(params))))
+            return 2
         cases = auto_cases(params, only)
-    unknown = sorted({k for c in cases for k in c["D"] if k not in params})
+    fixed_names = {f.split("=", 1)[0].strip() for f in a.fixed}
+    unknown = sorted(({k for c in cases for k in c["D"]} | fixed_names) - set(params))
     if unknown:
-        print("REFUSED: these parameters do not exist in the file (OpenSCAD would ignore them):", ", ".join(unknown))
+        print("REFUSED: these are not Customizer parameters of the file (OpenSCAD would ignore them):", ", ".join(unknown))
         return 2
     os.makedirs(a.out, exist_ok=True)
+    previous = done_cases(a.report) if a.resume else {}
+    rep = open(a.report, "a" if a.resume else "w", encoding="utf-8") if a.report else None
+
+    def emit(line):
+        print(line, flush=True)
+        if rep:
+            rep.write(line + "\n"); rep.flush()
+
+    emit(f"sweep of {a.scad} — {len(cases)} cases — {time.strftime('%Y-%m-%d %H:%M')} — engine {os.path.basename(a.openscad)}"
+         + (f" — resuming, {len(previous)} cases already done" if previous else ""))
     results = []
-    lines = [f"sweep of {a.scad} — {len(cases)} cases — {time.strftime('%Y-%m-%d %H:%M')}"]
     for c in cases:
+        if c["name"] in previous:
+            st = previous[c["name"]].split()[0]
+            results.append({"name": c["name"], "status": st, "end": c.get("end", False),
+                            "reason": previous[c["name"]], "resumed": True})
+            continue
         r = run_case(a.openscad, a.scad, c, params, a.fixed, a.out, a.timeout)
+        r["end"] = c.get("end", False)
         if r["status"] == "PASS" and a.check:
             try:
                 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
                 from check_stl import check_file
-                secs = [float(z) for z in a.sections.split(",") if z.strip()] if a.sections else []
-                chk = check_file(r["stl"], sections=secs, allow_bridges=a.allow_bridges)
+                chk = check_file(r["stl"], sections=a.sections, allow_bridges=a.allow_bridges, **r.get("check_args", {}))
                 if not chk["ok"]:
                     r["status"] = "FAIL"
                     r["reason"] = "check_stl: " + "; ".join(chk["fail"])
                 elif chk["warn"]:
-                    r["reason"] = "check_stl warn: " + "; ".join(chk["warn"])
+                    r["reason"] = (r["reason"] + "; " if r["reason"] else "") + "check_stl warn: " + "; ".join(chk["warn"])
             except Exception as e:  # pragma: no cover
+                r["status"] = "FAIL"
                 r["reason"] = f"check_stl could not run: {e}"
         results.append(r)
-        line = f"{r['status']:5s}  {r['name']:40s} {r['seconds']:>6}s  {r['reason']}"
-        lines.append(line)
-        print(line, flush=True)
+        emit(f"{r['status']:5s}  {r['name']:40s} {r['seconds']:>6}s  {r['reason']}")
     n = {s: sum(1 for r in results if r["status"] == s) for s in ("PASS", "GUARD", "FAIL")}
-    summary = f"SUMMARY: {n['PASS']} PASS, {n['GUARD']} GUARD, {n['FAIL']} FAIL of {len(results)}"
-    lines.append(summary)
-    print(summary)
-    if a.report:
-        with open(a.report, "w") as f:
-            f.write("\n".join(lines) + "\n")
+    ends = [r["name"] for r in results if r["status"] == "GUARD" and r.get("end")]
+    emit(f"SUMMARY: {n['PASS']} PASS, {n['GUARD']} GUARD, {n['FAIL']} FAIL of {len(results)}")
+    if ends:
+        emit(f"SLIDER ENDS STOPPED BY A GUARD ({len(ends)}): {', '.join(ends)} — narrow these ranges unless another "
+             "parameter makes the end valid (T3)")
+    if rep:
+        rep.close()
     with open(os.path.join(a.out, "sweep_results.json"), "w") as f:
         json.dump(results, f, indent=2)
     return 1 if n["FAIL"] else 0
