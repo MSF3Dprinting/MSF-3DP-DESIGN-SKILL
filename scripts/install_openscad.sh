@@ -40,8 +40,9 @@ timeout 300 pip install -q $PY_PKGS --break-system-packages 2>/dev/null \
   || timeout 300 pip install -q $PY_PKGS 2>&1 | tail -1      # older pip has no --break-system-packages
 
 # 5. FAST GEOMETRY EXPORT: OpenSCAD 2025.07 with the Manifold engine, from the npm package openscad-wasm
-#    (npmjs.org is on the sandbox allow-list; files.openscad.org is not). 4-22x faster than 2021.01 CGAL on
-#    typical MSF parts. Used automatically by export.sh and sweep.py through the `openscad-fast` wrapper.
+#    (npmjs.org is on the sandbox allow-list; files.openscad.org is not). 4-28x faster than 2021.01 CGAL on
+#    typical MSF parts (measured Sept 2026). Used automatically by export.sh, sweep.py, flatten_scad.py and
+#    lint_customizer.py through the `openscad-fast` wrapper.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if command -v node >/dev/null 2>&1; then
   if [ ! -f "$HOME/.openscad-wasm/node_modules/openscad-wasm/openscad.js" ]; then

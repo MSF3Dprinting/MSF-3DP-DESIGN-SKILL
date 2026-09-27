@@ -23,6 +23,8 @@ Checks (T25)
              in the derived values.
   parts      a `part` menu with two or more components also offers  all  (all parts on one print plate) and
              assembly  (the assembled view).
+  2021.01    the file opens in OpenSCAD 2021.01 (the language level of every delivered .scad, §6.1): the fast
+             2025.07 engine accepts newer syntax silently, so the native binary parses the file (echo export).
 The widgets are read from OpenSCAD's own parameter export (openscad-fast --export-format param), so the
 check sees exactly what the Customizer shows.
 
@@ -193,6 +195,30 @@ def main(argv=None):
                     for need, what in (("all", "all parts on one print plate"), ("assembly", "the assembled view")):
                         if need not in vals:
                             fails.append(f"part: {len(comps)} components but no `{need}` option ({what})")
+
+    # language level: the native 2021.01 binary must open the file (quick echo export, no geometry)
+    native = shutil.which("openscad")
+    if native:
+        try:
+            ver = subprocess.run([native, "--version"], capture_output=True, text=True, timeout=60)
+            if "2021.01" in (ver.stdout + ver.stderr):
+                tmp = tempfile.mkdtemp(prefix="lint21_")
+                try:
+                    echo = os.path.join(tmp, "x.echo")
+                    p = subprocess.run([native, "-o", echo, "--export-format", "echo", os.path.abspath(a.scad)],
+                                       capture_output=True, text=True, timeout=300, cwd=os.path.dirname(os.path.abspath(a.scad)))
+                    out21 = p.stdout + p.stderr + (open(echo, encoding="utf-8", errors="replace").read() if os.path.exists(echo) else "")
+                finally:
+                    shutil.rmtree(tmp, ignore_errors=True)
+                errs = [l for l in out21.splitlines()
+                        if "ERROR" in l or "Parser error" in l or "unknown function" in l or "unknown module" in l]
+                if p.returncode != 0 or errs:
+                    fails.append("does not open in OpenSCAD 2021.01 (the language level of every delivered file): "
+                                 + ("; ".join(errs[:2]) or f"exit {p.returncode}"))
+        except Exception as e:  # pragma: no cover
+            notes.append(f"OpenSCAD 2021.01 parse check skipped: {e}")
+    else:
+        notes.append("native openscad 2021.01 not installed: language-level check skipped")
 
     kind = "Customizer file" if customizer else "working file"
     for n in notes:

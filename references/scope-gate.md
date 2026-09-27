@@ -1,6 +1,6 @@
 # Scope and safety gate
 
-*Reference file of the `msf-3dp-design` skill. Read it before Round B of the intake and before any warning, restriction or critical-item decision.* Section numbers (§) are those of the compiled workflow file (CLAUDE.md v1.2) and are kept so that cross-references stay valid: §0–§3 SKILL.md · §4 scope-gate.md · §5 design-rules.md · §6–§7 openscad-environment.md · §8 ipc-and-hospital.md · §9 compatibility-and-markings.md · §10 verification.md · §11–§12 deliverables.md · §13 lessons.md · Appendix A glossary.md · Appendix C sources.md.
+*Reference file of the `msf-3dp-design` skill. Read it before the safety questions of the questionnaire (§3.2 block 2) and before any warning, restriction or critical-item decision.* Section numbers (§) are shared by every file of the skill: §0–§3 SKILL.md · §4 scope-gate.md · §5 design-rules.md · §6–§7 openscad-environment.md · §8 ipc-and-hospital.md · §9 compatibility-and-markings.md · §10 verification.md · §11–§12 deliverables.md · §13 lessons.md · readiness-levels.md · Appendix A glossary.md · Appendix C sources.md.
 
 ## 4. Scope and safety gate
 
@@ -13,7 +13,7 @@ What you do:
 1. Say which category applies and what the guideline says.
 2. **State the failure consequence in concrete terms** — what drops, how far, what disconnects, who is exposed ("one corner of the concentrator drops about 50 mm"; "a blockage upstream of the relief valve pushes exhaust gas back to the patient"). Do not dramatise a hazard to support a warning, and do not minimise one to avoid it.
 3. Recommend not printing, name the alternative (OEM part, a jig, a holder, a non‑contact accessory) and the advisor who must be involved.
-4. Decide **per component**: which parts stay original or metal, which are printed (§3.2a). Hold the line on the unsafe component, not on the whole request. If the user insists, ask what design they have in mind — the concept often changes the load path.
+4. Decide **per component**: which parts stay original or metal, which are printed (§3.1). Hold the line on the unsafe component, not on the whole request. If the user insists, ask what design they have in mind — the concept often changes the load path.
 5. If the user decides to continue: continue as a critical draft (§4.2); print `WARNING - against MSF guideline <category>: advisor decision required` in the header, the README and STATUS.md; record the user's decision and role in STATUS.md; require the advisor's written decision before release.
 
 **Hard stops** (these two never continue): a part meant to harm a person or damage equipment; a part that is illegal to manufacture.

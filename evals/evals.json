@@ -4,44 +4,145 @@
     {
       "id": 1,
       "prompt": "I need something to hold the oximeter next to the bed",
-      "expected_output": "Opens with the process, runs the existing-design check (UMS pulse oximeter holder), then Round A/B/C with lettered options and a recommended default; asks whether it has been made before; no modelling yet.",
-      "files": []
+      "expected_output": "Research first (the UMS pulse oximeter holder), then the questionnaire as consecutive option-picker calls with no process explanation and no modelling; the first call asks what and where and whether it has been made before; measurements last with a drawing; one confirmation with a concept card.",
+      "files": [],
+      "expectations": [
+        "The first reply is an option-picker call (or lettered options), not an explanation of the process",
+        "One of the first questions asks whether the item has been made before",
+        "Every question offers 2-4 options with a recommended default or an 'I don't know' / 'I'll type it' option",
+        "No .scad, STL or render is produced before the user confirms",
+        "The existing UMS pulse oximeter holder is mentioned in the confirmation, not in a separate message"
+      ]
     },
     {
       "id": 2,
       "prompt": "Design a token for the tabletop simulation set: an isolation bed I3 in two colours, 40 x 20 mm footprint",
-      "expected_output": "Non-clinical training item: text and colour bands allowed; reads compatibility-and-markings.md (colour bands, stand and tab); asks the handling and colour questions; plans a flat print with band heights.",
-      "files": []
+      "expected_output": "Non-clinical training item: text and colour bands allowed; reads compatibility-and-markings.md; asks the handling and colour questions; plans a flat print with band heights; the label text is a free-text parameter, every fixed choice a menu.",
+      "files": [],
+      "expectations": [
+        "The design allows text and colour bands because the item is non-clinical",
+        "Band heights follow the standard bands (base 2.0 mm, 0.6 mm per colour)",
+        "The label text ('I3') is a text parameter; fixed choices such as the token type are Customizer menus",
+        "Numbers in the Customizer are sliders with ranges"
+      ]
     },
     {
       "id": 3,
       "prompt": "Make a spare wheel for the oxygen concentrator",
-      "expected_output": "Spare-part procedure: asks make/model, searches the OEM part number, splits the assembly into components, applies the load-bearing (4.1c) conditions with a concrete failure consequence instead of a flat refusal.",
-      "files": []
+      "expected_output": "Spare-part procedure: asks make and model, looks for the OEM part number when web tools are available (otherwise asks for it), splits the assembly into components, applies the load-bearing conditions (4.1c) with a concrete failure consequence instead of a flat refusal; metal axle from the kit or site.",
+      "files": [],
+      "expectations": [
+        "The reply asks for the make and model of the concentrator",
+        "The OEM spare part is searched for when web tools are available, or its part number is asked for",
+        "The assembly is split into components that stay original or metal and components that could be printed",
+        "The failure consequence is stated concretely (e.g. how far a corner drops), not as a general 'unsafe'",
+        "The axle or stem is metal (a kit M6 bolt or an original part), never printed"
+      ]
     },
     {
       "id": 4,
-      "prompt": "Here is a photo of the broken battery cover, can you make me a new one? (photo attached, shows the meter with a patient wristband visible on the table)",
-      "expected_output": "Personal-data procedure first (wristband \u2192 category named, crop/re-shoot); then photo-dimension method with an outline overlay gate; fit-trial release path if the device cannot be measured.",
-      "files": []
+      "prompt": "Here is a photo of the broken battery cover, can you make me a new one?",
+      "expected_output": "Personal-data procedure first: the wristband in the photo is named as a category without repeating its content, an anonymised copy is used and the user is told to restart with a clean photo; then the photo-dimension method with an outline overlay confirmed before modelling; a fit-trial release if the device cannot be measured.",
+      "files": ["evals/files/battery_cover_photo.png"],
+      "expectations": [
+        "The reply says the photo contains personal data (a patient wristband) without repeating the name, ID or date on it",
+        "The wristband content never appears in any reply, file name or deliverable",
+        "An anonymised working copy (cropped to the device, metadata removed) is used for the design",
+        "Dimensions from the photo use the ruler for scale and are marked as estimated; depths are asked for with calipers",
+        "The outline overlay is shown and confirmed before modelling"
+      ]
     },
     {
       "id": 5,
       "prompt": "We need a funnel to fill the ORS packets into bottles in the pharmacy",
-      "expected_output": "Direct contact with unpackaged medicine \u2192 \u00a74.1 warning with concrete consequence, alternative (holder for packaged items, or a certified funnel), advisor named; continues only on a recorded decision as a critical draft.",
-      "files": []
+      "expected_output": "Direct contact with unpackaged medicine: section 4.1 warning with the concrete consequence, an alternative (a holder for packaged items, or a certified funnel), the advisor named; continues only on a recorded decision, as a critical draft.",
+      "files": [],
+      "expectations": [
+        "The reply names the DO NOT PRINT category (direct contact with medicine outside its primary packaging)",
+        "The consequence is stated concretely, without dramatising or minimising it",
+        "An alternative is proposed (a certified funnel, or a holder that touches only packaging)",
+        "The advisor who must decide is named",
+        "Nothing is designed unless the user records the decision to continue, and then only as a critical draft with the warning in the header and README"
+      ]
     },
     {
       "id": 6,
       "prompt": "We need 10 identical spacer ribs, 40 x 8 x 3 mm, for the shelf in the pharmacy store",
-      "expected_output": "Questionnaire as picker calls (few rounds \u2014 most answers are in the request), one confirmation, one build; export.sh with x10 -> rib_1..rib_10 STL files listed in the README parts table with a picture; flat customizer file; no licence text.",
-      "files": []
+      "expected_output": "Few picker rounds (most answers are in the request), one confirmation, the design review pictures, then one build: export.sh with x10 gives rib_1..rib_10 STL files listed in the README parts table with a picture; the Customizer file with the exact five-line header; README credits Claude and the skill with its link; no licence text in README or DATASHEET.",
+      "files": [],
+      "expectations": [
+        "stl/ contains <item>_rib_1_v1.0.stl ... <item>_rib_10_v1.0.stl and no unnumbered rib STL",
+        "The README parts table shows the ribs with quantity 10 and a picture",
+        "<item>_customizer.scad starts with exactly five lines: // @name:, // @description:, // @category:, // @credit:, // @license: MIT",
+        "The working .scad file has no @ lines",
+        "lint_customizer.py passes on both files",
+        "The README contains the line crediting Claude and the msf-3dp-design skill with https://github.com/MSF3Dprinting/MSF-3DP-DESIGN-SKILL",
+        "grep -i licen on README.md and DATASHEET.md finds nothing"
+      ]
     },
     {
       "id": 7,
       "prompt": "Make the pulse oximeter holder we discussed, here are the measurements: rail 32 mm, device 70x35x150",
-      "expected_output": "Expert fast path: one picker round (safety gate, cleaning, fit), confirmation, then a single build pass delivering scad + customizer file, STLs in print position, README with follow-up table, DATASHEET, renders, coupon; renders via openscad-fast in seconds.",
-      "files": []
+      "expected_output": "Expert fast path: one picker round (safety gate, cleaning, fit), confirmation, then the model and its checks, then the design review with pictures (render sheet, context or assembled view, section) before any file or document; after the click the build pass: STLs via openscad-fast, PNG views via the native OpenSCAD, Customizer file, README with follow-up table, DATASHEET, coupon.",
+      "files": [],
+      "expectations": [
+        "Only one picker round is asked before the confirmation",
+        "Before any .scad, STL, README or DATASHEET is delivered, the user is shown pictures of the design and asked to approve them",
+        "STL export uses openscad-fast; the PNG views use the native openscad through render_views.py",
+        "The README contains the follow-up table (installation, 2 weeks, 1 month, 3 months)",
+        "A coupon STL is part of the package"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "Make a customizable bracket to bolt a small shelf to the steel trolley, I want to put it in the customizer catalogue",
+      "expected_output": "Kit hardware first: M6 bolts, washers and self-locking nuts from the kit, the length chosen by kit_bolt_for and echoed; loads along the layers; Customizer: sliders for numbers, menus for fixed choices, help text above, the exact five-line header only in the Customizer file with @license: MIT; any non-kit part listed exactly with two alternatives and where it can be taken from.",
+      "files": [],
+      "expectations": [
+        "The bracket is fixed with MSF kit hardware (DIN 912 M6 or M3 bolts, DIN 125A washers, DIN 985 nuts), and the bolt length is one the kit contains",
+        "Any hardware that is not in the kit is listed with its exact size and standard, at least two local alternatives, and medical and non-medical places it could be taken from",
+        "The Customizer file's first five lines are exactly // @name: ... // @description: ... // @category: ... // @credit: ... // @license: MIT and no other @ line exists",
+        "Every number in the Customizer is a slider or a numeric menu and every fixed choice is a menu (lint_customizer.py passes)",
+        "The design states how the shelf load runs along the layers and gives a hand estimate"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "Design a clamp in two halves that holds a 25 mm pole to a 32 mm rail at 90 degrees",
+      "expected_output": "Two components: a part menu with each half in print position, all parts on one print plate, and the assembled view; fastener pattern with at least two kit bolts per side of each clamped member; no bolt load into thin wings; enough material over the V apex; structural review with a section shown at the design review.",
+      "files": [],
+      "expectations": [
+        "The part menu offers each half, 'all' (one print plate) and 'assembly' (assembled view, not for printing)",
+        "The print plate fits the MK4S bed and passes check_stl with its body count",
+        "The assembled view is exported to stl/view_only/ and not listed as a part to print",
+        "Each clamped member is held by at least two fasteners on each side, not on one diagonal line",
+        "The design review shows a section of the load-bearing zone and asks where it could bend or where layers could open"
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "We need a rack to hang silicone tubes of 4, 6, 8 and 10 mm to dry after cleaning in CSSD",
+      "expected_output": "Soft-part intake: asks what may touch the tubes and whether anything may enter the lumen, how it is done today; weighs the tubes; the confirmation carries a concept card with the holding principle, the numbers and what the answers exclude; hold limits in numbers.",
+      "files": [],
+      "expectations": [
+        "The questionnaire asks which surfaces may be touched and whether anything may enter the tube lumen",
+        "The questionnaire asks how the tubes are dried today and what goes wrong",
+        "The confirmation contains a concept card: the holding principle in one sentence, numbers for the hold against the tube weight, and what the current answers exclude",
+        "The design does not rely on friction alone on the outside of a soft tube without stating the limit in numbers",
+        "The README states the hold limit per tube size in numbers"
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "The design looks good but make the side tabs of the wall pocket wider, 20 mm",
+      "expected_output": "A change at the design review: the model parameter changes, checks run again, new pictures are shown for approval; no README or DATASHEET is written or rewritten until the user approves.",
+      "files": [],
+      "expectations": [
+        "The change is made as a parameter (tab_w = 20), not as a new file",
+        "The checks run again on the changed model",
+        "New pictures are shown for approval",
+        "No README, DATASHEET or Customizer file is produced before the user approves the new pictures"
+      ]
     }
   ]
 }
